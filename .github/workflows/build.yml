@@ -586,7 +586,6 @@ jobs:
         with:
           family: ${{ inputs.version }}
           mode: ${{ inputs.abi_mode }}
-}
 
       - name: Consolidated Build Summary
         id: build-summary
