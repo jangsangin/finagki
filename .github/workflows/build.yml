@@ -577,15 +577,15 @@ jobs:
           version: ${{ inputs.version }}
           page_size: ${{ inputs.page_size }}
 
-      #- name: ABI gate
-      #  Fails the leg when a symbol CRC moved and no allowlist entry covers it.
-      #  Runs even after a failed build: if Module.symvers exists, the CRCs are
-      #  real and worth reporting.
-      #  if: always()
-      #  uses: ./.github/actions/abi-gate
-        #with:
-          #family: ${{ inputs.version }}
-          #mode: ${{ inputs.abi_mode }}
+      - name: ABI gate
+       Fails the leg when a symbol CRC moved and no allowlist entry covers it.
+       Runs even after a failed build: if Module.symvers exists, the CRCs are
+       real and worth reporting.
+       if: always()
+        uses: ./.github/actions/abi-gate
+        with:
+          family: ${{ inputs.version }}
+          mode: ${{ inputs.abi_mode }}
 
       - name: Consolidated Build Summary
         id: build-summary
