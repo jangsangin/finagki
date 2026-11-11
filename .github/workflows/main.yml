@@ -256,7 +256,12 @@ jobs:
           # master tip 2d5786b9 (2026-11-01, "susfs: Separate provider and
           # operation state").
           PIN_FINASU="2d5786b9129a254a87ac358c8bec0203ccd53351"
-          # SUSFS (gitlab simonpunk/susfs4ksu): every gki-<family> branch moved
+          # SUSFS (gitlab simonpunk/susfs4ksu): synced with muling0721/GKI_FinaSU
+          # config/config - the 2026-11-09 22:16 +0800 snapshot ("KernelSU: Sync
+          # with upstream", module.prop v2.4.0) for 5.10 (android12), 5.15
+          # (android13), 6.1, 6.6 and 6.12. android13-5.10 / android14-5.15 are not
+          # covered by that snapshot and keep the older pins below.
+          # Previous refresh: every gki-<family> branch moved
           # one commit, "KernelSU: Fix compiler error" (2026-10-30) - a compile
           # fix for newer KernelSU headers, no new config symbol, no ABI change.
           # The previous refresh (2026-10-27) added the priority uid filter
@@ -265,13 +270,13 @@ jobs:
           # susfs_is_priority_uid_filtered() lives in fs/susfs.c, so the config
           # list still needs no change.
           declare -A PIN_SUSFS=(
-            [susfs_commit_android12_5_10]="b0e474642cf77ee797004a454fa441362723d0ba"
+            [susfs_commit_android12_5_10]="5436438b5cc77f146e04f71070da153dabe17a9d"
             [susfs_commit_android13_5_10]="8a120081f2739bc0e4b1f6a389d8236f22944acc"
-            [susfs_commit_android13_5_15]="d5df1d937361530787fafa920dea3a9b6dc8ebef"
+            [susfs_commit_android13_5_15]="fe943d15ec6a1891f7a360bf210589bdffe4e318"
             [susfs_commit_android14_5_15]="e22ceec7cbc459dcf560cf4a0ac34a8235c8df84"
-            [susfs_commit_android14_6_1]="a0ac906915c8a8d50d474dfb3cae478ef32edc1a"
-            [susfs_commit_android15_6_6]="c7f670f57b7d43d75066b6657f8aee9cdf580d96"
-            [susfs_commit_android16_6_12]="68f62fae75ada3959f816841a3c64299383521ed"
+            [susfs_commit_android14_6_1]="69b8e734920b8f9ed885ab8d112969719698e242"
+            [susfs_commit_android15_6_6]="ec03d0c73b821afa1d5037d6d493216f59744fcb"
+            [susfs_commit_android16_6_12]="395a8c0c88d348e9fe7c14f66a456fde4653287c"
           )
           # BakaSU keeps its own SUSFS pin set (kept separate so it can diverge
           # again). Values = the same verified branch tips as PIN_SUSFS.
