@@ -216,6 +216,31 @@ runs:
           esac
           stock="$STOCK"; pinned="$PINNED"
 
+          # FinaSU: prefer the official GitHub Release APK when the latest
+          # release tag points at the very commit the kernel is built from.
+          # The build-manager.yml CI artifact for that commit is named by
+          # `git describe` at build time (e.g. v1.5.2-12-g67a56dc2) because
+          # CI can run before the tag exists; the Release APK carries the real
+          # version (v1.6.0). Same commit, so kernel and manager stay in sync.
+          # Falls through to the CI-run lookup below on any miss.
+          if [[ "$flavor" == "finasu" && -n "$stock" ]]; then
+            rel_json="$(gh api "repos/${owner}/${repo}/releases/latest" 2>/dev/null || true)"
+            rel_tag="$(jq -r '.tag_name // empty' <<< "${rel_json:-{\}}" 2>/dev/null || true)"
+            rel_id="$(jq -r '.id // empty' <<< "${rel_json:-{\}}" 2>/dev/null || true)"
+            rel_apks="$(jq -r '[.assets[]? | select(.name | endswith(".apk"))] | length' <<< "${rel_json:-{\}}" 2>/dev/null || echo 0)"
+            if [[ -n "$rel_tag" && -n "$rel_id" && "${rel_apks:-0}" -gt 0 ]]; then
+              rel_sha="$(retry git ls-remote "https://github.com/${owner}/${repo}.git" "refs/tags/${rel_tag}^{}" "refs/tags/${rel_tag}" \
+                | awk '/\^\{\}$/{p=$1} {a=$1} END{print (p ? p : a)}')"
+              if [[ "$rel_sha" == "$stock" ]]; then
+                echo "FinaSU: using release ${rel_tag} APK (tag commit == ${stock})" >&2
+                printf -v REC '{"flavor":"%s","owner":"%s","repo":"%s","source":"release","run_id":%s,"stock":"%s","want":"%s","note":"release-%s"}' \
+                  "$flavor" "$owner" "$repo" "$rel_id" "$stock" "$want" "$rel_tag"
+                return 0
+              fi
+              echo "FinaSU: release ${rel_tag} (${rel_sha}) != kernel commit ${stock}; using CI-run manager" >&2
+            fi
+          fi
+
           run_id="$(find_run "$owner" "$repo" "$wf" "$stock")"
           if [[ -z "$run_id" ]]; then
             # The pershoot fork runs no manager CI at all, so a dev-susfs commit
