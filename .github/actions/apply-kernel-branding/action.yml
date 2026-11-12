@@ -24,6 +24,15 @@ inputs:
     description: 'Keep stock KMI generation suffix (e.g., -8) and append brand after it. Off = legacy hardcoded replace.'
     required: false
     default: 'false'
+  uname_override:
+    description: >-
+      Full kernel release string to force (what uname -r prints), e.g.
+      6.12.69-android16-6-g5fd39602326e-ab16372235-4k. Applied only when it starts
+      with KERNEL.SUBLEVEL-androidNN of this build; otherwise skipped with a
+      warning and the normal branding runs. Empty = off. Takes precedence over
+      brand_name / keep_kmi.
+    required: false
+    default: ''
 
 runs:
   using: "composite"
@@ -31,12 +40,47 @@ runs:
     - name: Apply Kernel Name Branding
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
+      env:
+        UNAME_OVERRIDE: ${{ inputs.uname_override }}
       run: |
         VERSION="${{ inputs.version }}"
         ANDROID_PART=$(echo "$VERSION" | cut -d- -f1)
         KERNEL_PART=$(echo "$VERSION" | cut -d- -f2)
         BRAND="${{ inputs.brand_name }}"
         KEEP_KMI="${{ inputs.keep_kmi }}"
+
+        # --- exact uname override (wins over brand_name / keep_kmi) ---------
+        # The final line of scripts/setlocalversion is replaced by a fixed echo,
+        # so the scm hash (-g<12 hex>), the Kleaf build id (-ab<id>) and the page
+        # size suffix (-4k) all come from the string given here instead of from
+        # this tree. On android15+ setlocalversion prints the FULL release; on
+        # older families it prints only the suffix after KERNEL.SUBLEVEL.
+        if [ -n "${UNAME_OVERRIDE:-}" ]; then
+          if ! [[ "$UNAME_OVERRIDE" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "::error title=uname_override::'$UNAME_OVERRIDE' has characters outside [A-Za-z0-9._+-]"
+            exit 1
+          fi
+          BASE="$KERNEL_PART.${{ inputs.sublevel }}"
+          PREFIX="$BASE-$ANDROID_PART"
+          case "$UNAME_OVERRIDE" in
+            "$PREFIX"|"$PREFIX"-*)
+              if [[ "$VERSION" == "android15-6.6" || "$VERSION" == "android16-6.12" || "$VERSION" == "android17-6.18" ]]; then
+                LOCALVER_OUT="$UNAME_OVERRIDE"
+              else
+                LOCALVER_OUT="${UNAME_OVERRIDE#"$BASE"}"
+              fi
+              sed -i '$d' scripts/setlocalversion && echo "echo \"$LOCALVER_OUT\"" >> scripts/setlocalversion
+              chmod +x scripts/setlocalversion
+              tail -n 1 scripts/setlocalversion
+              echo "UNAME_EXPECTED=$UNAME_OVERRIDE" >> "$GITHUB_ENV"
+              echo "uname_override applied: $UNAME_OVERRIDE"
+              exit 0
+              ;;
+            *)
+              echo "::warning title=uname_override skipped::'$UNAME_OVERRIDE' does not start with '$PREFIX' (this build); using normal branding"
+              ;;
+          esac
+        fi
 
         if [ -z "$BRAND" ]; then
           echo "brand_name is empty, keeping stock kernel version string"

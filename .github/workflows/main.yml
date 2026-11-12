@@ -53,6 +53,10 @@ on:
         description: "Keep stock KMI generation suffix in kernel version (fix #265)"
         type: boolean
         default: false
+      uname_override:
+        description: "Exact kernel release string (uname -r) to force, e.g. the stock boot.img string. Only applied to the build whose KERNEL.SUBLEVEL-androidNN prefix matches; empty = normal branding"
+        type: string
+        default: 6.12.69-android16-6-g5fd39602326e-ab16372235-4k
       commit_mode:
         description: "latest = branch tips, verified = audited pins"
         required: false
@@ -722,6 +726,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -753,6 +758,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -784,6 +790,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -815,6 +822,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -846,6 +854,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -877,6 +886,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -908,6 +918,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}
@@ -944,6 +955,7 @@ jobs:
       droidspaces_commit: ${{ needs.resolve-sources.outputs.droidspaces_commit }}
       brand_name: ${{ inputs.brand_name || 'Wild' }}
       keep_kmi: ${{ inputs.keep_kmi || false }}
+      uname_override: ${{ inputs.uname_override || '' }}
       os_patch_level: ${{ inputs.os_patch_level || 'All' }}
       abi_mode: check
       allow_version_mismatch: ${{ inputs.allow_version_mismatch || false }}

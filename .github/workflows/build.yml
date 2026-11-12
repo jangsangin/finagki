@@ -67,6 +67,10 @@ on:
         required: false
         type: boolean
         default: false
+      uname_override:
+        required: false
+        type: string
+        default: ""
       allow_version_mismatch:
         required: false
         type: boolean
@@ -535,6 +539,7 @@ jobs:
           sublevel: ${{ steps.extract.outputs.sublevel }}
           brand_name: ${{ inputs.brand_name }}
           keep_kmi: ${{ inputs.keep_kmi }}
+          uname_override: ${{ inputs.uname_override }}
 
       - name: Remove Protected Exports
         uses: ./.github/actions/remove-protected-exports
@@ -576,6 +581,35 @@ jobs:
         with:
           version: ${{ inputs.version }}
           page_size: ${{ inputs.page_size }}
+
+      - name: Verify uname release string
+        # Only runs when apply-kernel-branding actually applied an override for
+        # this leg (it exports UNAME_EXPECTED). Reads the linux_banner out of the
+        # built Image and compares it with what was requested. A mismatch is a
+        # warning, not a failure, so the artifact is still produced and the
+        # real string is visible in the log.
+        if: ${{ env.UNAME_EXPECTED != '' }}
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          IMG=""
+          for c in kernel/bazel-bin/common/kernel_aarch64/Image \
+                   /home/runner/out/dist/Image \
+                   AnyKernel3/Image; do
+            if [ -f "$c" ]; then IMG="$c"; break; fi
+          done
+          if [ -z "$IMG" ]; then
+            echo "::warning title=uname verify skipped::no built Image found"
+            exit 0
+          fi
+          ACTUAL="$(grep -a -m1 -o 'Linux version [^ ]*' "$IMG" | cut -d' ' -f3 || true)"
+          echo "expected: $UNAME_EXPECTED"
+          echo "actual  : ${ACTUAL:-<not found>}"
+          if [ "$ACTUAL" = "$UNAME_EXPECTED" ]; then
+            echo "uname release string matches"
+          else
+            echo "::warning title=uname mismatch::Image reports '${ACTUAL:-<not found>}', expected '$UNAME_EXPECTED'"
+          fi
 
       - name: ABI gate
         # Fails the leg when a symbol CRC moved and no allowlist entry covers it.
