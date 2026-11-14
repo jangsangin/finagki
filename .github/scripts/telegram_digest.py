@@ -474,6 +474,13 @@ def main() -> int:
         if "perf" in feats_on:
             flines2.append("- Performance patches")
             rlines2.append("- **Performance patches**")
+        if "bore" in feats_on:
+            _dormant = " (dormant by default)" if "boreoff" in feats_on else ""
+            flines2.append("- BORE scheduler" + _dormant)
+            rlines2.append("- **BORE scheduler**" + _dormant)
+        if "adios" in feats_on:
+            flines2.append("- ADIOS I/O scheduler")
+            rlines2.append("- **ADIOS I/O scheduler**")
         feat_text = "\n".join(flines2)
         feat_rich = "\n".join(rlines2)
 

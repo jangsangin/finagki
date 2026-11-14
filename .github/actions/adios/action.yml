@@ -1,0 +1,128 @@
+name: 'Add ADIOS I/O scheduler'
+description: 'Apply the ADIOS I/O scheduler patch (6.12/6.6/6.1/5.15/5.10) and make it the default in gki_defconfig'
+inputs:
+  kernel_version:
+    description: 'Kernel version (e.g., 6.12)'
+    required: true
+  sublevel:
+    description: 'Kernel sublevel (e.g., 69)'
+    required: true
+  patches_ref:
+    description: 'Bouteillepleine/kernel_patches branch or tag'
+    required: false
+    default: 'main'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Fetch ADIOS patches
+      shell: bash
+      env:
+        PATCHES_REF: ${{ inputs.patches_ref }}
+      run: |
+        # Patches come from Bouteillepleine/kernel_patches (same source the
+        # cos-badgeall builder used). Cloned once per job, shared by BORE/ADIOS.
+        DEST="$GITHUB_WORKSPACE/bouton_kernel_patches"
+        if [ ! -d "$DEST/experimental" ]; then
+          rm -rf "$DEST"
+          ok=0
+          for attempt in 1 2 3 4 5; do
+            if git clone --depth 1 -b "${PATCHES_REF:-main}" https://github.com/Bouteillepleine/kernel_patches.git "$DEST"; then ok=1; break; fi
+            echo "clone attempt $attempt failed, retrying..." >&2
+            rm -rf "$DEST"; sleep $((attempt * 5))
+          done
+          [ "$ok" = 1 ] || { echo "::error::could not clone Bouteillepleine/kernel_patches"; exit 1; }
+        fi
+        echo "Bouteillepleine/kernel_patches @ $(git -C "$DEST" rev-parse --short HEAD)"
+
+    - name: Add ADIOS I/O scheduler
+      shell: bash
+      env:
+        KERNEL_VER: ${{ inputs.kernel_version }}
+        TKERNEL_VER: ${{ inputs.kernel_version }}.${{ inputs.sublevel }}
+        COMMON_KERNEL_FOLDER: ${{ github.workspace }}/kernel/common
+        ADIOS_PATCHES_FOLDER: ${{ github.workspace }}/bouton_kernel_patches/experimental
+      run: |
+        set -euo pipefail
+        echo "::group::Add ADIOS I/O Scheduler"
+
+        cd "$COMMON_KERNEL_FOLDER"
+
+        if [ -z "${ADIOS_PATCHES_FOLDER:-}" ]; then
+          echo "::error::ADIOS_PATCHES_FOLDER is not set"
+          exit 1
+        fi
+
+        if [ ! -d "$ADIOS_PATCHES_FOLDER" ]; then
+          echo "::error::ADIOS patches folder not found: $ADIOS_PATCHES_FOLDER"
+          exit 1
+        fi
+
+        PATCH_FILE=""
+
+        case "${KERNEL_VER}" in
+          "6.12")
+            PATCH_FILE="$ADIOS_PATCHES_FOLDER/adios_ioscheduler_6.12.patch"
+            ;;
+          "6.6")
+            PATCH_FILE="$ADIOS_PATCHES_FOLDER/adios_ioscheduler_6.6.patch"
+            ;;
+          "5.15")
+            PATCH_FILE="$ADIOS_PATCHES_FOLDER/adios_ioscheduler_5.15.patch"
+            ;;
+          "5.10")
+            PATCH_FILE="$ADIOS_PATCHES_FOLDER/adios_ioscheduler_5.10.patch"
+            ;;
+          "6.1")
+            if [ "${TKERNEL_VER:-}" = "6.1.57" ] || [ "${TKERNEL_VER:-}" = "6.1.75" ]; then
+              PATCH_FILE="$ADIOS_PATCHES_FOLDER/adios_ioscheduler_6.1_old.patch"
+            else
+              PATCH_FILE="$ADIOS_PATCHES_FOLDER/adios_ioscheduler_6.1.patch"
+            fi
+            ;;
+          *)
+            echo "::warning::ADIOS not configured for kernel ${KERNEL_VER} (supported: 5.10, 5.15, 6.1, 6.6, 6.12)"
+            echo "::endgroup::"
+            exit 0
+            ;;
+        esac
+
+        if [ ! -f "$PATCH_FILE" ]; then
+          echo "::error::ADIOS patch not found: $PATCH_FILE"
+          find "$ADIOS_PATCHES_FOLDER" -maxdepth 3 -type f -iname "*adios*" -print || true
+          exit 1
+        fi
+
+        if [ -f "block/adios.c" ]; then
+          echo "ADIOS source already exists. Skipping."
+        else
+          cp "$PATCH_FILE" ./adios.patch
+
+          if patch -p1 --ignore-whitespace -F 3 < adios.patch 2>&1 | tee /tmp/adios_patch.log; then
+            echo "ADIOS patch applied successfully"
+          else
+            echo "::warning::ADIOS patch reported an issue"
+            if grep -q "malformed patch" /tmp/adios_patch.log; then
+              patch -p1 --force --ignore-whitespace < adios.patch || true
+            fi
+            if find . -name "*.rej" -print -quit | grep -q .; then
+              echo "::error::ADIOS patch failed. Reject files:"
+              find . -name "*.rej" -exec echo "=== {} ===" \; -exec cat {} \;
+              exit 1
+            fi
+          fi
+
+          rm -f adios.patch
+        fi
+
+        DEFCONFIG="$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig"
+
+        if ! grep -q "^CONFIG_MQ_IOSCHED_ADIOS=" "$DEFCONFIG"; then
+          {
+            echo "CONFIG_MQ_IOSCHED_ADIOS=y"
+            echo "CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=y"
+          } >> "$DEFCONFIG"
+        fi
+
+        echo "✅ ADIOS I/O scheduler setup completed"
+        echo "::endgroup::"

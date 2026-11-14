@@ -115,6 +115,18 @@ on:
         description: "Performance"
         type: boolean
         default: false
+      use_bore:
+        description: "BORE scheduler (6.12/6.6/6.1/5.15/5.10)"
+        type: boolean
+        default: false
+      bore_default_on:
+        description: "BORE: active from boot (off = compiled in, enable with echo 1 > /proc/sys/kernel/sched_bore)"
+        type: boolean
+        default: true
+      use_adios:
+        description: "ADIOS I/O scheduler (6.12/6.6/6.1/5.15/5.10)"
+        type: boolean
+        default: false
       test_release_notes:
         description: "Render release notes preview only (skip all builds + release)"
         type: boolean
@@ -562,6 +574,7 @@ jobs:
             F_PIDS=false
             F_CFSBW=false
             F_BPF=true;    F_PERF=false
+            F_BORE=false;  F_BOREOFF=false; F_ADIOS=false
           else
             F_SUSFS="${{ inputs.use_susfs }}";   F_NOMOUNT="${{ inputs.use_nomount }}"
             F_BBG="${{ inputs.use_bbg }}";        F_NET="${{ inputs.use_net }}"
@@ -572,6 +585,9 @@ jobs:
             F_NTSYNC="${{ inputs.use_ntsync }}"
             F_PTRACE="${{ inputs.use_ptrace }}";  F_UNICODE="${{ inputs.use_unicode }}"
             F_BPF="${{ inputs.use_bpf }}";        F_PERF="${{ inputs.use_perf }}"
+            F_BORE="${{ inputs.use_bore }}";      F_ADIOS="${{ inputs.use_adios }}"
+            F_BOREOFF=false
+            [ "$F_BORE" = "true" ] && [ "${{ inputs.bore_default_on }}" != "true" ] && F_BOREOFF=true
           fi
 
           FEATURES=""
@@ -589,6 +605,9 @@ jobs:
           [ "$F_UNICODE" = "true" ] && FEATURES="${FEATURES}Unicode+"
           [ "$F_BPF" = "true" ] && FEATURES="${FEATURES}BPF+"
           [ "$F_PERF" = "true" ] && FEATURES="${FEATURES}Perf+"
+          [ "$F_BORE" = "true" ] && FEATURES="${FEATURES}BORE+"
+          [ "$F_BOREOFF" = "true" ] && FEATURES="${FEATURES}BOREOFF+"
+          [ "$F_ADIOS" = "true" ] && FEATURES="${FEATURES}ADIOS+"
           echo "feature_set=${FEATURES%+}" >> "$GITHUB_OUTPUT"
 
       - name: Clone shared source repos once
@@ -1888,6 +1907,9 @@ jobs:
           USE_UNICODE: ${{ inputs.use_unicode || (github.event_name == 'schedule' && true) || false }}
           USE_BPF: ${{ inputs.use_bpf || (github.event_name == 'schedule' && true) || false }}
           USE_PERF: ${{ inputs.use_perf || false }}
+          USE_BORE: ${{ inputs.use_bore || false }}
+          BORE_DEFAULT_ON: ${{ inputs.bore_default_on }}
+          USE_ADIOS: ${{ inputs.use_adios || false }}
           PAGE_SIZE: ${{ inputs.page_size || '4k' }}
           KERNEL_BUILD_VERSION: ${{ inputs.kernel_build_version || 'All' }}
           NOMOUNT_COMMIT: ${{ needs.resolve-sources.outputs.nomount_commit }}

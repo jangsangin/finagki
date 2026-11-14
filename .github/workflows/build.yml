@@ -512,6 +512,22 @@ jobs:
           kernel_version: ${{ inputs.kernel_version }}
           sublevel: ${{ steps.extract.outputs.sublevel }}
 
+      # BORE / ADIOS: opt-in (use_bore / use_adios). 'BOREOFF' in the feature
+      # set means BORE is compiled in but starts dormant (sched_bore=0).
+      - name: Apply BORE Scheduler
+        if: contains(inputs.feature_set, 'BORE')
+        uses: ./.github/actions/bore
+        with:
+          kernel_version: ${{ inputs.kernel_version }}
+          default_on: ${{ !contains(inputs.feature_set, 'BOREOFF') }}
+
+      - name: Add ADIOS I/O Scheduler
+        if: contains(inputs.feature_set, 'ADIOS')
+        uses: ./.github/actions/adios
+        with:
+          kernel_version: ${{ inputs.kernel_version }}
+          sublevel: ${{ steps.extract.outputs.sublevel }}
+
       - name: Apply Device-Specific Patches
         uses: ./.github/actions/apply-device-patches
         with:
