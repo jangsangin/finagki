@@ -157,12 +157,25 @@ runs:
           if [ -n "${{ steps.clang.outputs.dir }}" ]; then
             CLANG_FLAGS+=(--user_clang_toolchain="${{ steps.clang.outputs.dir }}")
           fi
-          tools/bazel build \
+          if ! tools/bazel build \
             --config=fast \
             "${PAGE_SIZE_FLAGS[@]}" \
             "${CLANG_FLAGS[@]}" \
             --disk_cache=/home/runner/.cache/bazel \
-            "$BAZEL_TARGET"
+            "$BAZEL_TARGET"; then
+            if [ "${#CLANG_FLAGS[@]}" -gt 0 ]; then
+              echo "::group::clang diagnostics (host tool compile, full command + toolchain layout)"
+              tools/bazel build --config=fast "${CLANG_FLAGS[@]}" --subcommands --keep_going \
+                //build/kernel:wrapped/tar 2>&1 | grep -E "^(  )?(external|/).*clang\+\+|--sysroot|-isystem|-stdlib|-nostdinc|-I" | cut -c1-3000 | head -20 || true
+              OB="$(tools/bazel info output_base 2>/dev/null || true)"
+              for d in "$OB"/external/*kleaf_clang_toolchain*; do
+                echo "== $d"; ls -la "$d" | head -40
+                [ -f "$d/BUILD.bazel" ] && sed -n 1,200p "$d/BUILD.bazel"
+              done
+              echo "::endgroup::"
+            fi
+            exit 1
+          fi
         fi
 
     - name: 'Verify Page Size in Generated .config'
