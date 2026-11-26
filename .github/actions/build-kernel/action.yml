@@ -166,7 +166,15 @@ runs:
             else
               echo "$HITS" | while read -r f; do
                 echo "found _LIBCPP_HAS_MUSL_LIBC in $f:"; grep -n '_LIBCPP_HAS_MUSL_LIBC' "$f" | head -5
-                sed -i 's/_LIBCPP_HAS_MUSL_LIBC=ON/_LIBCPP_HAS_MUSL_LIBC=1/g' "$f"
+                case "$f" in
+                  ./prebuilts/clang/host/linux-x86/kleaf/*.bzl)
+                    # Host tools build against an old musl sysroot that lacks the *_l
+                    # locale functions newer libc++ calls; map them to the plain ones,
+                    # and let libc++ supply its own rune table.
+                    sed -i -E 's/^([[:space:]]*)"-D_LIBCPP_HAS_MUSL_LIBC=ON",/\1"-D_LIBCPP_HAS_MUSL_LIBC=1",\n\1"-D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE",\n\1"-Dstrtoll_l(a,b,c,d)=strtoll(a,b,c)",\n\1"-Dstrtoull_l(a,b,c,d)=strtoull(a,b,c)",/' "$f"
+                    echo "--- patched $f:"; grep -n -B2 -A5 'LIBCPP_HAS_MUSL_LIBC' "$f" | head -20
+                    ;;
+                esac
               done
             fi
           fi
