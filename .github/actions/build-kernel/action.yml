@@ -156,6 +156,16 @@ runs:
           CLANG_FLAGS=()
           if [ -n "${{ steps.clang.outputs.dir }}" ]; then
             CLANG_FLAGS+=(--user_clang_toolchain="${{ steps.clang.outputs.dir }}")
+            # Newer libc++ tests _LIBCPP_HAS_MUSL_LIBC with '#if' (needs 0/1);
+            # Kleaf passes '=ON', which evaluates to 0 and triggers the
+            # "unknown rune table" #error in host-tool builds. '=1' is also
+            # fine for older libc++ ('#ifdef').
+            grep -rIl --include='*.bzl' --include='*.bazel' --include='*.bazelrc' \
+              -e '_LIBCPP_HAS_MUSL_LIBC=ON' build prebuilts/clang prebuilts/kernel-build-tools 2>/dev/null \
+              | while read -r f; do
+                  echo "patching $f"
+                  sed -i 's/_LIBCPP_HAS_MUSL_LIBC=ON/_LIBCPP_HAS_MUSL_LIBC=1/g' "$f"
+                done || true
           fi
           if ! tools/bazel build \
             --config=fast \
