@@ -14,6 +14,11 @@ inputs:
     required: false
     type: boolean
     default: false
+  clang_revision:
+    description: 'AOSP clang to build with (e.g. r547379). Empty = read .github/clang-revision; if that is empty/missing too, keep the toolchain pinned by the kernel manifest.'
+    required: false
+    type: string
+    default: ''
 runs:
   using: composite
   steps:
@@ -49,6 +54,59 @@ runs:
     #       ls "${{ github.workspace }}/kernel"
     #       exit 1
     #     fi
+
+    - name: 'Fetch newer Android clang'
+      id: clang
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel
+      env:
+        CLANG_REV_INPUT: ${{ inputs.clang_revision }}
+        CLANG_REV_FILE: ${{ github.workspace }}/.github/clang-revision
+      run: |
+        set -euo pipefail
+        CLANG_REV="$CLANG_REV_INPUT"
+        if [ -z "$CLANG_REV" ] && [ -f "$CLANG_REV_FILE" ]; then
+          CLANG_REV="$(grep -vE '^[[:space:]]*(#|$)' "$CLANG_REV_FILE" | head -n1 | tr -d '[:space:]' || true)"
+        fi
+        if [ -z "$CLANG_REV" ]; then
+          echo "No clang revision requested; keeping the manifest toolchain."
+          echo "dir=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        case "$CLANG_REV" in
+          r[0-9]*) ;;
+          *) echo "ERROR: clang revision must look like r547379, got '$CLANG_REV'" >&2; exit 1 ;;
+        esac
+
+        if [ -f build/build.sh ]; then
+          echo "::warning::this tree builds with build/build.sh; --user_clang_toolchain is a Kleaf flag, keeping the manifest toolchain"
+          echo "dir=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # Fail early (not 40 minutes into the build) if this Kleaf has no such flag.
+        if ! grep -rqs "user_clang_toolchain" build/kernel/kleaf 2>/dev/null; then
+          echo "ERROR: this Kleaf has no --user_clang_toolchain flag; cannot swap the compiler" >&2
+          exit 1
+        fi
+
+        DEST="/home/runner/clang-${CLANG_REV}"
+        rm -rf "$DEST" && mkdir -p "$DEST"
+        URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main-kernel/clang-${CLANG_REV}.tar.gz"
+        ok=0
+        for attempt in 1 2 3; do
+          if curl -fsSL --retry 3 --connect-timeout 30 -o /tmp/clang.tgz "$URL" && tar -xzf /tmp/clang.tgz -C "$DEST"; then
+            ok=1; break
+          fi
+          echo "clang download failed ($attempt/3)" >&2
+          rm -rf "$DEST"/* /tmp/clang.tgz
+          sleep $((attempt * 15))
+        done
+        [ "$ok" = 1 ] || { echo "ERROR: could not fetch clang-${CLANG_REV} from main-kernel" >&2; exit 1; }
+        rm -f /tmp/clang.tgz
+
+        [ -x "$DEST/bin/clang" ] || { echo "ERROR: $DEST/bin/clang missing after extract" >&2; exit 1; }
+        echo "Using: $("$DEST/bin/clang" --version | head -n1)"
+        echo "dir=$DEST" >> "$GITHUB_OUTPUT"
 
     - name: 'Build Kernel'
       shell: bash
@@ -95,9 +153,14 @@ runs:
           else
             BAZEL_TARGET=//common:kernel_aarch64/Image
           fi
+          CLANG_FLAGS=()
+          if [ -n "${{ steps.clang.outputs.dir }}" ]; then
+            CLANG_FLAGS+=(--user_clang_toolchain="${{ steps.clang.outputs.dir }}")
+          fi
           tools/bazel build \
             --config=fast \
             "${PAGE_SIZE_FLAGS[@]}" \
+            "${CLANG_FLAGS[@]}" \
             --disk_cache=/home/runner/.cache/bazel \
             "$BAZEL_TARGET"
         fi
