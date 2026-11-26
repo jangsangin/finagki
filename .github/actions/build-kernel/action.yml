@@ -160,12 +160,15 @@ runs:
             # Kleaf passes '=ON', which evaluates to 0 and triggers the
             # "unknown rune table" #error in host-tool builds. '=1' is also
             # fine for older libc++ ('#ifdef').
-            grep -rIl --include='*.bzl' --include='*.bazel' --include='*.bazelrc' \
-              -e '_LIBCPP_HAS_MUSL_LIBC=ON' build prebuilts/clang prebuilts/kernel-build-tools 2>/dev/null \
-              | while read -r f; do
-                  echo "patching $f"
-                  sed -i 's/_LIBCPP_HAS_MUSL_LIBC=ON/_LIBCPP_HAS_MUSL_LIBC=1/g' "$f"
-                done || true
+            HITS="$(grep -rIl -e '_LIBCPP_HAS_MUSL_LIBC' . --exclude-dir=.git --exclude-dir=out 2>/dev/null || true)"
+            if [ -z "$HITS" ]; then
+              echo "::warning::no file mentions _LIBCPP_HAS_MUSL_LIBC in the kernel tree; flag comes from elsewhere"
+            else
+              echo "$HITS" | while read -r f; do
+                echo "found _LIBCPP_HAS_MUSL_LIBC in $f:"; grep -n '_LIBCPP_HAS_MUSL_LIBC' "$f" | head -5
+                sed -i 's/_LIBCPP_HAS_MUSL_LIBC=ON/_LIBCPP_HAS_MUSL_LIBC=1/g' "$f"
+              done
+            fi
           fi
           if ! tools/bazel build \
             --config=fast \
