@@ -620,6 +620,64 @@ jobs:
           nomount_commit: ${{ inputs.nomount_commit }}
           susfs_commit: ${{ inputs.susfs_commit }}
 
+      # 내장 NoMount는 커널 기능만 포함하므로 매니저가 찾는 nm(CLI)과 모듈 폴더가
+      # 기기에 없다. 커널 zip에 모듈 파일을 같이 넣고, 플래시할 때 자동 설치한다.
+      - name: Download NoMount metamodule for AnyKernel3
+        id: nm-dl
+        if: (contains(inputs.feature_set, 'NoMount') || inputs.feature_set == 'All') && !cancelled()
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: NoMount-Metamodule
+          path: ${{ runner.temp }}/nomount-metamodule
+
+      - name: Bundle NoMount metamodule into AnyKernel3
+        if: steps.nm-dl.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="${RUNNER_TEMP}/nomount-metamodule"
+          dst="${{ github.workspace }}/AnyKernel3/nomount_module"
+          test -f "$src/module.prop"
+          test -f "$src/bin/nm-arm64"
+          rm -rf "$dst"
+          cp -a "$src" "$dst"
+          # 모듈 설치 스크립트(customize.sh)가 하던 일을 빌드 시점에 미리 한다.
+          mv "$dst/bin/nm-arm64" "$dst/bin/nm"
+          rm -f "$dst/bin/nm-arm"
+          chmod 0755 "$dst/bin/nm"
+          rm -rf "$dst/lkm"
+
+          ak="${{ github.workspace }}/AnyKernel3/anykernel.sh"
+          test -f "$ak"
+          cat >> "$ak" <<'EOF'
+
+          ### NoMount metamodule auto-install (nm CLI + module dir)
+          if [ -d "$AKHOME/nomount_module" ]; then
+            ui_print " "
+            ui_print "  -> Installing NoMount metamodule..."
+            NM_DST=/data/adb/modules/nomount
+            if [ -d /data/adb ]; then
+              rm -rf "$NM_DST"
+              mkdir -p "$NM_DST" /data/adb/nomount
+              cp -a "$AKHOME/nomount_module/." "$NM_DST/"
+              chmod 0755 "$NM_DST/bin/nm"
+              chown -R 0:0 "$NM_DST" 2>/dev/null
+              rm -f /data/adb/nomount/.booting /data/adb/nomount/disable
+              for r in ksu ap; do
+                if [ -d "/data/adb/$r" ]; then
+                  mkdir -p "/data/adb/$r/bin"
+                  ln -sf "$NM_DST/bin/nm" "/data/adb/$r/bin/nm"
+                fi
+              done
+              ui_print "  -> NoMount metamodule installed (reboot to apply)"
+            else
+              ui_print "  -> /data/adb not accessible; flash from the root manager to install NoMount module"
+            fi
+          fi
+          EOF
+          bash -n "$ak"
+
       - name: Upload Artifacts
         id: kernel-artifact
         uses: actions/upload-artifact@v7
