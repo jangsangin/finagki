@@ -1,0 +1,85 @@
+name: 'Integrate fgetpriority (built-in)'
+description: 'getpriority/ioprio 결과 숨김 기능(aerath-stuff/fgetpriority)을 커널에 내장(CONFIG_FGETPRIORITY=y)'
+
+inputs:
+  version:
+    description: 'Kernel config version (e.g., android16-6.12)'
+    required: true
+  commit:
+    description: '업스트림 커밋 고정 (비우면 최신)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Copy fgetpriority sources into kernel tree
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+
+        test -f drivers/Kconfig && test -f drivers/Makefile || {
+          echo "drivers/Kconfig 또는 drivers/Makefile 없음" >&2
+          exit 1
+        }
+
+        dst=drivers/fgetpriority
+        rm -rf "$dst"
+        mkdir -p "$dst"
+
+        # 1) 업스트림 최신 소스를 받는다 (inputs.commit 이 있으면 그 커밋으로 고정).
+        # 2) 실패하거나 필수 파일이 없으면 저장소에 포함된 복사본을 쓴다.
+        src=""
+        up="${RUNNER_TEMP}/fgetpriority-upstream"
+        rm -rf "$up"
+        for attempt in 1 2 3; do
+          if git clone --quiet --depth=1 https://github.com/aerath-stuff/fgetpriority.git "$up"; then
+            if [ -n "${{ inputs.commit }}" ]; then
+              git -C "$up" fetch --quiet --depth=1 origin "${{ inputs.commit }}" && git -C "$up" checkout --quiet --detach FETCH_HEAD || { rm -rf "$up"; continue; }
+            fi
+            if [ -f "$up/kernel/main.c" ] && [ -f "$up/kernel/Kconfig" ] && [ -f "$up/kernel/Makefile" ]; then
+              src="$up/kernel"
+              echo "fgetpriority: 업스트림 사용 ($(git -C "$up" rev-parse --short HEAD))"
+              break
+            fi
+            echo "fgetpriority: 업스트림 구조가 예상과 다름"
+            break
+          fi
+          sleep $((attempt * 5))
+        done
+        if [ -z "$src" ]; then
+          src="${{ github.action_path }}/src"
+          echo "::warning::fgetpriority: 업스트림을 받지 못해 저장소 복사본을 사용합니다"
+        fi
+        cp -a "$src/." "$dst/"
+        rm -rf "$dst/.git" "$dst/build_ddk.sh" "$dst/Makefile.ddk"
+
+        # 내장 빌드는 기본값(m) 대신 =y 로 켠다.
+        sed -i '/default m/d' "$dst/Kconfig"
+        grep -q 'config FGETPRIORITY' "$dst/Kconfig" || { echo "::error::fgetpriority Kconfig 에 FGETPRIORITY 없음"; exit 1; }
+
+        if ! grep -q 'drivers/fgetpriority/Kconfig' drivers/Kconfig; then
+          # 마지막 endmenu 바로 앞에 source 한 줄을 추가한다.
+          python3 - <<'PY'
+        import re
+        p = "drivers/Kconfig"
+        s = open(p).read()
+        i = s.rstrip().rfind("endmenu")
+        assert i != -1, "drivers/Kconfig: endmenu not found"
+        s = s[:i] + 'source "drivers/fgetpriority/Kconfig"\n\n' + s[i:]
+        open(p, "w").write(s)
+        PY
+        fi
+
+        if ! grep -q 'fgetpriority' drivers/Makefile; then
+          printf '\nobj-$(CONFIG_FGETPRIORITY)\t+= fgetpriority/\n' >> drivers/Makefile
+        fi
+
+        grep -n fgetpriority drivers/Kconfig drivers/Makefile
+
+    - name: Enable fgetpriority
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_FGETPRIORITY=y
