@@ -547,12 +547,6 @@ jobs:
         with:
           version: ${{ inputs.version }}
 
-      - name: Integrate vpnhide (built-in)
-        if: inputs.version == 'android16-6.12'
-        uses: ./.github/actions/vpnhide
-        with:
-          version: ${{ inputs.version }}
-
       - name: Apply Kernel Branding
         uses: ./.github/actions/apply-kernel-branding
         with:
