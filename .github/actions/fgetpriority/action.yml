@@ -1,0 +1,54 @@
+name: 'Integrate fgetpriority (built-in)'
+description: 'getpriority/ioprio 결과 숨김 기능(aerath-stuff/fgetpriority)을 커널에 내장(CONFIG_FGETPRIORITY=y)'
+
+inputs:
+  version:
+    description: 'Kernel config version (e.g., android16-6.12)'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Copy fgetpriority sources into kernel tree
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        set -euo pipefail
+
+        test -f drivers/Kconfig && test -f drivers/Makefile || {
+          echo "drivers/Kconfig 또는 drivers/Makefile 없음" >&2
+          exit 1
+        }
+
+        dst=drivers/fgetpriority
+        rm -rf "$dst"
+        mkdir -p "$dst"
+        cp -a "${{ github.action_path }}/src/." "$dst/"
+
+        # 내장 빌드는 tristate 기본값(m)을 쓰지 않도록 y로 고정한다.
+        sed -i 's/tristate "uid filter"/bool "fgetpriority (uid filter)"/; /default m/d' "$dst/Kconfig"
+
+        if ! grep -q 'drivers/fgetpriority/Kconfig' drivers/Kconfig; then
+          # 마지막 endmenu 바로 앞에 source 한 줄을 추가한다.
+          python3 - <<'PY'
+        import re
+        p = "drivers/Kconfig"
+        s = open(p).read()
+        i = s.rstrip().rfind("endmenu")
+        assert i != -1, "drivers/Kconfig: endmenu not found"
+        s = s[:i] + 'source "drivers/fgetpriority/Kconfig"\n\n' + s[i:]
+        open(p, "w").write(s)
+        PY
+        fi
+
+        if ! grep -q 'fgetpriority' drivers/Makefile; then
+          printf '\nobj-$(CONFIG_FGETPRIORITY)\t+= fgetpriority/\n' >> drivers/Makefile
+        fi
+
+        grep -n fgetpriority drivers/Kconfig drivers/Makefile
+
+    - name: Enable fgetpriority
+      uses: ./.github/actions/set-kernel-config
+      with:
+        config_list: |
+          CONFIG_FGETPRIORITY=y
